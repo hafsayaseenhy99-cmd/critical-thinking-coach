@@ -65,7 +65,7 @@ Do NOT include any opinions or suggested answers. The scenario should feel real 
     });
   } catch (error) {
     console.error("Scenario generation error:", error.message);
-    return Response.json({ error: "Failed to generate scenario" }, { status: 500 });
+    return Response.json({ error: "Failed to generate scenario", detail: error.message }, { status: 500 });
   }
 };
 
