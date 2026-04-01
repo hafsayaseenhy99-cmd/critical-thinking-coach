@@ -1,11 +1,10 @@
 [build]
-  command = "cd client && npm install && npm run build"
+  command = "cd netlify/functions && npm install && cd ../../client && npm install && npm run build"
   publish = "client/dist"
 
 [functions]
   directory = "netlify/functions"
-  node_bundler = "esbuild"
-  included_files = ["netlify/functions/package.json"]
+  node_bundler = "nft"
 
 [[redirects]]
   from = "/api/*"
