@@ -282,8 +282,8 @@ export default function CriticalThinkingCoach() {
   const toggleRecording = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      setMicError("Your browser doesn't support voice input. Try Chrome.");
-      setTimeout(() => setMicError(""), 3000);
+      setMicError("Voice input isn't supported in this browser.");
+      setTimeout(() => setMicError(""), 4000);
       return;
     }
 
@@ -292,42 +292,58 @@ export default function CriticalThinkingCoach() {
       return;
     }
 
+    setMicError("");
     const recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
+    // continuous:false works more reliably in Arc/Chromium variants
+    recognition.continuous = false;
+    recognition.interimResults = false;
     recognition.lang = "en-US";
+    recognition.maxAlternatives = 1;
     recognitionRef.current = recognition;
-
-    let finalTranscript = input;
 
     recognition.onstart = () => setIsRecording(true);
 
     recognition.onresult = (e) => {
-      let interim = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const t = e.results[i][0].transcript;
-        if (e.results[i].isFinal) finalTranscript += (finalTranscript ? " " : "") + t;
-        else interim = t;
+      const transcript = Array.from(e.results)
+        .map((r) => r[0].transcript)
+        .join(" ")
+        .trim();
+      if (transcript) {
+        setInput((prev) => (prev ? prev + " " + transcript : transcript));
       }
-      setInput(finalTranscript + (interim ? " " + interim : ""));
     };
 
     recognition.onerror = (e) => {
       setIsRecording(false);
-      if (e.error !== "aborted") {
-        setMicError(e.error === "not-allowed" ? "Microphone access denied." : "Voice input error. Try again.");
-        setTimeout(() => setMicError(""), 3000);
+      recognitionRef.current = null;
+      const errorMessages = {
+        "not-allowed": "Microphone access denied. Allow mic access in Arc → Settings → Privacy.",
+        "network": "Can't reach speech service. In Arc, go to Settings → Privacy and allow speech recognition.",
+        "service-not-allowed": "Speech service blocked. Try: Arc menu → Settings → Privacy → allow microphone.",
+        "no-speech": "No speech detected — try again.",
+        "audio-capture": "Microphone not found. Check your mic is connected.",
+        "aborted": "",
+      };
+      const msg = errorMessages[e.error] || `Voice error (${e.error}) — try again.`;
+      if (msg) {
+        setMicError(msg);
+        setTimeout(() => setMicError(""), 6000);
       }
     };
 
     recognition.onend = () => {
       setIsRecording(false);
-      setInput(finalTranscript.trim());
       recognitionRef.current = null;
       setTimeout(() => inputRef.current?.focus(), 50);
     };
 
-    recognition.start();
+    try {
+      recognition.start();
+    } catch (err) {
+      setIsRecording(false);
+      setMicError("Could not start microphone. Check mic permissions in Arc.");
+      setTimeout(() => setMicError(""), 5000);
+    }
   };
 
   const handleKeyDown = (e) => {
@@ -1097,8 +1113,9 @@ const styles = {
   micError: {
     fontSize: 12,
     color: "#D4733C",
-    padding: "4px 20px 0",
+    padding: "6px 20px 2px",
     textAlign: "center",
+    lineHeight: 1.5,
   },
   sendBtn: {
     width: 42,
