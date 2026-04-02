@@ -108,9 +108,12 @@ export default function CriticalThinkingCoach() {
   const [evaluation, setEvaluation] = useState(null);
   const [conversationHistory, setConversationHistory] = useState([]);
   const [personalPrompt, setPersonalPrompt] = useState("");
+  const [isRecording, setIsRecording] = useState(false);
+  const [micError, setMicError] = useState("");
   const chatEndRef = useRef(null);
   const inputRef = useRef(null);
   const personalInputRef = useRef(null);
+  const recognitionRef = useRef(null);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -274,6 +277,57 @@ export default function CriticalThinkingCoach() {
     }
     setLoading(false);
     setScreen("results");
+  };
+
+  const toggleRecording = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setMicError("Your browser doesn't support voice input. Try Chrome.");
+      setTimeout(() => setMicError(""), 3000);
+      return;
+    }
+
+    if (isRecording && recognitionRef.current) {
+      recognitionRef.current.stop();
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+    recognitionRef.current = recognition;
+
+    let finalTranscript = input;
+
+    recognition.onstart = () => setIsRecording(true);
+
+    recognition.onresult = (e) => {
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) finalTranscript += (finalTranscript ? " " : "") + t;
+        else interim = t;
+      }
+      setInput(finalTranscript + (interim ? " " + interim : ""));
+    };
+
+    recognition.onerror = (e) => {
+      setIsRecording(false);
+      if (e.error !== "aborted") {
+        setMicError(e.error === "not-allowed" ? "Microphone access denied." : "Voice input error. Try again.");
+        setTimeout(() => setMicError(""), 3000);
+      }
+    };
+
+    recognition.onend = () => {
+      setIsRecording(false);
+      setInput(finalTranscript.trim());
+      recognitionRef.current = null;
+      setTimeout(() => inputRef.current?.focus(), 50);
+    };
+
+    recognition.start();
   };
 
   const handleKeyDown = (e) => {
@@ -575,17 +629,46 @@ export default function CriticalThinkingCoach() {
           <div ref={chatEndRef} />
         </div>
 
+        {micError && (
+          <div style={styles.micError}>{micError}</div>
+        )}
         <div style={styles.inputBar}>
           <textarea
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={isPersonal ? "Think out loud..." : "Share your reasoning..."}
-            style={styles.textarea}
+            placeholder={isRecording ? "Listening…" : (isPersonal ? "Think out loud..." : "Share your reasoning...")}
+            style={{
+              ...styles.textarea,
+              borderColor: isRecording ? "#D4733C" : undefined,
+              boxShadow: isRecording ? "0 0 0 2px #D4733C33" : undefined,
+            }}
             rows={1}
             disabled={loading}
           />
+          <button
+            onClick={toggleRecording}
+            disabled={loading}
+            title={isRecording ? "Stop recording" : "Record voice"}
+            style={{
+              ...styles.micBtn,
+              background: isRecording ? "#D4733C" : "#2e2a25",
+              opacity: loading ? 0.4 : 1,
+              animation: isRecording ? "micPulse 1.2s ease-in-out infinite" : "none",
+            }}
+          >
+            {isRecording ? (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                <line x1="12" y1="19" x2="12" y2="23"/>
+                <line x1="8" y1="23" x2="16" y2="23"/>
+              </svg>
+            )}
+          </button>
           <button
             onClick={sendMessage}
             disabled={!input.trim() || loading}
@@ -604,6 +687,7 @@ export default function CriticalThinkingCoach() {
         @keyframes fadeDot1 { 0%,100%{opacity:.2} 33%{opacity:1} }
         @keyframes fadeDot2 { 0%,100%{opacity:.2} 50%{opacity:1} }
         @keyframes fadeDot3 { 0%,100%{opacity:.2} 66%{opacity:1} }
+        @keyframes micPulse { 0%,100%{box-shadow:0 0 0 0 #D4733C55} 50%{box-shadow:0 0 0 6px #D4733C00} }
         textarea::placeholder { color: #5a5550; }
         * { box-sizing: border-box; }
         ::-webkit-scrollbar { width: 4px; }
@@ -995,6 +1079,26 @@ const styles = {
     outline: "none",
     lineHeight: 1.5,
     maxHeight: 120,
+  },
+  micBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    border: "none",
+    color: "#e8e0d4",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+    transition: "all 0.2s",
+    fontFamily: "'DM Sans', sans-serif",
+  },
+  micError: {
+    fontSize: 12,
+    color: "#D4733C",
+    padding: "4px 20px 0",
+    textAlign: "center",
   },
   sendBtn: {
     width: 42,
